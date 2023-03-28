@@ -227,7 +227,7 @@ class DecoderBlock(nn.Module): # self-attention, encoder에 대한 attention
         return z, key_and_value, mask, prev, future_mask
 
 
-class MySequential(nn.Sequential):
+class MySequential(nn.Sequential):# 튜플로 받아서 동작할 수 있도록 만듬
 
     def forward(self, *x):
         # nn.Sequential class does not provide multiple input arguments and returns.
@@ -265,11 +265,11 @@ class Transformer(nn.Module):
 
         super().__init__()
 
-        self.emb_enc = nn.Embedding(input_size, hidden_size)
+        self.emb_enc = nn.Embedding(input_size, hidden_size) 
         self.emb_dec = nn.Embedding(output_size, hidden_size)
-        self.emb_dropout = nn.Dropout(dropout_p)
+        self.emb_dropout = nn.Dropout(dropout_p) # embedding layer에 붙여준다.
 
-        self.pos_enc = self._generate_pos_enc(hidden_size, max_length)
+        self.pos_enc = self._generate_pos_enc(hidden_size, max_length) # 매 미니배치마다 계산될 필요가 없다. 큰것을 만들어놓고 필요한만큼 잘라서 계산량을 줄임
 
         self.encoder = MySequential(
             *[EncoderBlock(
@@ -295,26 +295,26 @@ class Transformer(nn.Module):
 
     @torch.no_grad()
     def _generate_pos_enc(self, hidden_size, max_length):
-        enc = torch.FloatTensor(max_length, hidden_size).zero_()
+        enc = torch.FloatTensor(max_length, hidden_size).zero_() # max_length * hidden_size라는 0으로 채운 enc를 만들어준다.
         # |enc| = (max_length, hidden_size)
 
-        pos = torch.arange(0, max_length).unsqueeze(-1).float()
-        dim = torch.arange(0, hidden_size // 2).unsqueeze(0).float()
+        pos = torch.arange(0, max_length).unsqueeze(-1).float() # 0부터 끝까지 벡터를 만들어주게 된다. .unsqueeze로 마지막 한차원을 붙여서 float로 만들어준다.
+        dim = torch.arange(0, hidden_size // 2).unsqueeze(0).float() # 벡터에서 한 차원 더해서 텐서를 만든다.
         # |pos| = (max_length, 1)
         # |dim| = (1, hidden_size // 2)
 
-        enc[:, 0::2] = torch.sin(pos / 1e+4**dim.div(float(hidden_size)))
-        enc[:, 1::2] = torch.cos(pos / 1e+4**dim.div(float(hidden_size)))
+        enc[:, 0::2] = torch.sin(pos / 1e+4**dim.div(float(hidden_size))) # 짝수 디멘션
+        enc[:, 1::2] = torch.cos(pos / 1e+4**dim.div(float(hidden_size))) # 홀수 디멘션
 
         return enc
-
+ 
     def _position_encoding(self, x, init_pos=0):
         # |x| = (batch_size, n, hidden_size)
         # |self.pos_enc| = (max_length, hidden_size)
         assert x.size(-1) == self.pos_enc.size(-1)
         assert x.size(1) + init_pos <= self.max_length
-
-        pos_enc = self.pos_enc[init_pos:init_pos + x.size(1)].unsqueeze(0)
+        # init_pos는 추론할대 하나씩 들어와서 차근차근 나아가는데 그걸 위해서 만듦
+        pos_enc = self.pos_enc[init_pos:init_pos + x.size(1)].unsqueeze(0) # 0부터 실제 x의 사이즈 n까지 자른다./
         # |pos_enc| = (1, n, hidden_size)
         x = x + pos_enc.to(x.device)
 
@@ -329,8 +329,8 @@ class Transformer(nn.Module):
             if max_length - l > 0:
                 # If the length is shorter than maximum length among samples,
                 # set last few values to be 1s to remove attention weight.
-                mask += [torch.cat([x.new_ones(1, l).zero_(),
-                                    x.new_ones(1, (max_length - l))
+                mask += [torch.cat([x.new_ones(1, l).zero_(), # 
+                                    x.new_ones(1, (max_length - l)) # 나머지는 1로 채움움
                                     ], dim=-1)]
             else:
                 # If length of sample equals to maximum length among samples,
@@ -354,7 +354,7 @@ class Transformer(nn.Module):
 
             mask_enc = mask.unsqueeze(1).expand(*x.size(), mask.size(-1))
             mask_dec = mask.unsqueeze(1).expand(*y.size(), mask.size(-1))
-            # |mask_enc| = (batch_size, n, n)
+            # |mask_enc| = (batch_size, n, n):expand했을때 <- (bs,1,n):unsqueeze했을때
             # |mask_dec| = (batch_size, m, n)
 
         z = self.emb_dropout(self._position_encoding(self.emb_enc(x)))
